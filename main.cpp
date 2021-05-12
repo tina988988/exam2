@@ -19,34 +19,42 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
 #include "stm32l475e_iot01_accelero.h"
-void gestureUI(Arguments *in, Reply *out);
-void tilt(Arguments *in, Reply *out);
-RPCFunction rpcgesture(&gestureUI, "gestureUI");
-RPCFunction rpctilt(&tilt, "tilt");
+void acc(Arguments *in, Reply *out);
+void result(Arguments *in, Reply *out);
+//void acc(Arguments *in, Reply *out);
+//RPCFunction rpcgesture(&gestureUI, "gestureUI");
+RPCFunction rpcresult(&result, "result");
+RPCFunction rpcacc(&acc, "acc");
 BufferedSerial pc(USBTX, USBRX);
 Thread thread, t;
 EventQueue queue(64 * EVENTS_EVENT_SIZE);
-InterruptIn sw0(USER_BUTTON);
+//InterruptIn sw0(USER_BUTTON);
 WiFiInterface *wifi;
 
+double x[10] = {0};
+double y[10] = {0};
+double z[10] = {0};
+int ID[10] = {0};
+int fea[10] = {0}
 int16_t PDataXYZ[3] = {0};
-int16_t rDataXYZ[3] = {0};
+//int16_t rDataXYZ[3] = {0};
 uLCD_4DGL uLCD(D1, D0, D2);
-DigitalOut myled(LED1);
-DigitalOut myled2(LED2);
-DigitalOut myled3(LED3);
+//DigitalOut myled(LED1);
+//DigitalOut myled2(LED2);
+//DigitalOut myled3(LED3);
 
-int Count = 0;
-int ThresholdCount = 10;
+int n = 0;
+//int Count = 0;
+//int ThresholdCount = 10;
 
-int off = 1;
-int off2 = 1;
+//int off = 1;
+//int off2 = 1;
 
 double val = 0;
 int idR[32] = {0};
 int indexR = 0;
 //int gesture_index;
-int c=0, angle = 0;
+//int c=0, angle = 0;
 constexpr int kTensorArenaSize = 60 * 1024;
 uint8_t tensor_arena[kTensorArenaSize];
 MQTT::Client<MQTTNetwork, Countdown> *rpcclient;
@@ -59,25 +67,22 @@ const char* topic = "Mbed";
 Thread mqtt_thread(osPriorityHigh);
 EventQueue mqtt_queue;
 
-void led() {
-  while (off2) {
-    myled=!myled;
-    ThisThread::sleep_for(500ms);
+
+
+
+void feature() {
+  int over =0;
+  for(int i = 0; i < 8; i++) {
+    val = (x[i] - x[i+1])*(x[i+2] - x[i+1]) + (y[i] - y[i+1])*(y[i+2] - y[i+1]) + (z[i] - z[i+1])*(z[i+2] - z[i+1]);
+    val = val / sqrt((x[i] - x[i+1])*(x[i] - x[i+1]) + (y[i] - y[i+1])*(y[i] - y[i+1]) + (z[i] - z[i+1])*(z[i] - z[i+1]));
+    val = val / sqrt((x[i+2] - x[i+1])*(x[i+2] - x[i+1]) + (y[i+2] - y[i+1])*(y[i+2] - y[i+1]) + (z[i+2] - z[i+1])*(z[i+2] - z[i+1]));
+    val = acos(val);
+    val = val/ M_PI * 180;
+    if (val > 30) {
+      over++;
+    }
+    fea[n] = over;
   }
-}
-
-void Confirm_print() {
-  uLCD.cls();
-   printf("\nConfirm ! %d\n", c);
-   uLCD.printf("\nConfirm! ! !\n");
-   uLCD.printf("\nFinal Threshold angle = %d\n",angle );
-   myled = 0;
-}
-
-void Confirm_angle() {
-   c=1;
-   //printf("c = %d", c);
-   mqtt_queue.call(&Confirm_print);
 }
 
 int PredictGesture(float* output) {
@@ -128,7 +133,7 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     message_num++;
     MQTT::Message message;
     char buff[100];
-    sprintf(buff, "QoS0 Hello, Python! #%d", message_num);
+    sprintf(buff, "QoS0 ok #%d", message_num);
     message.qos = MQTT::QOS0;
     message.retained = false;
     message.dup = false;
@@ -139,8 +144,22 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     printf("rc:  %d\r\n", rc);
     printf("Puslish message: %s\r\n", buff);
 }
+void record() {
+  BSP_ACCELERO_AccGetXYZ(PDataXYZ);
+    int re = 0;
+    for (re = 0; re < 10; re++) {
+      x[re] = PDataXYZ[0];
+      y[re] = PDataXYZ[1]; 
+      z[re] = PDataXYZ[2]; 
+      ThisThread::sleep_for(100ms);
+    }
+}
 
 void angle_select() {
+ // BSP_ACCELERO_AccGetXYZ(PDataXYZ);
+  idR[indexR++] = mqtt_queue.call(record);
+  indexR = indexR % 32;
+  ThisThread::sleep_for(100ms);
    // Whether we should clear the buffer next time we fetch data
   bool should_clear_buffer = false;
   bool got_data = false;
@@ -236,32 +255,50 @@ void angle_select() {
     // Clear the buffer next time we read data
     should_clear_buffer = gesture_index < label_num;
 
-    sw0.rise(&Confirm_angle);
+    //sw0.rise(&Confirm_angle);
     // Produce an output
+    
+    /*int re = 0;
+    for (re = 0; ;re++) {
+      x[re] = PDataXYZ[0];
+      y[re] = PDataXYZ[1]; 
+      z[re] = PDataXYZ[2]; 
+      ThisThread::sleep_for(100ms);
+    }*/
     if (gesture_index < label_num) {
       error_reporter->Report(config.output_message[gesture_index]);
       if (gesture_index == 0) {
         uLCD.cls();
-        uLCD.printf("\nThreshold angle = 30\n");
-        angle = 30;
+        uLCD.printf("\ngesture ID : 1\n");
+        ID[n] = 1;
+        queue.call(feature);
+        mqtt_queue.call(&publish_message, rpcclient);
       }
       else if (gesture_index == 1) {
         uLCD.cls();
-        uLCD.printf("\nThreshold angle = 35\n");
-        angle = 35;
+        uLCD.printf("\ngesture ID : 2\n");
+        //angle = 35;
+        ID[n] = 2;
+        queue.call(feature);
+        mqtt_queue.call(&publish_message, rpcclient);
       }
       else if (gesture_index == 2) {
         uLCD.cls();
-        uLCD.printf("\nThreshold angle = 40\n");
-        angle = 40;
+        uLCD.printf("\ngesture ID : 3\n");
+        //angle = 40;
+        ID [n] = 3; 
+        queue.call(feature);
+        mqtt_queue.call(&publish_message, rpcclient);
       }
+      
     }
-
-    if (c == 1) {
+    
+    return;
+    //if (c == 1) {
       //printf("hello");
-      mqtt_queue.call(&publish_message, rpcclient);
-      return;
-    }
+    //  mqtt_queue.call(&publish_message, rpcclient);
+    //  return;
+    //}
   }
 }
 
@@ -275,16 +312,16 @@ void messageArrived(MQTT::MessageData& md) {
     sprintf(payload, "Payload %.*s\r\n", message.payloadlen, (char*)message.payload);
     printf(payload);
     ++arrivedcount;
-    if (c == 1) {
+   /* if (c == 1) {
       off2 = 0; 
       printf("Confirm angle");
       c = 0;
       queue.call(led);
-    }
-    if (Count > ThresholdCount) {
+    }*/
+    /*if (Count > ThresholdCount) {
       Count = 0;
       off = 0;
-    }
+    }*/
 }
 
 void close_mqtt() {
@@ -397,29 +434,13 @@ int main() {
    }
 }
 
-void record(void) {
-   //double val;
-   BSP_ACCELERO_AccGetXYZ(PDataXYZ);
-   val = PDataXYZ[0]*rDataXYZ[0] + PDataXYZ[1]*rDataXYZ[1] + PDataXYZ[2]*rDataXYZ[2];
-   val = val / sqrt(PDataXYZ[0]*PDataXYZ[0] + PDataXYZ[1]*PDataXYZ[1] + PDataXYZ[2]*PDataXYZ[2]);
-   val = val / sqrt(rDataXYZ[0]*rDataXYZ[0] + rDataXYZ[1]*rDataXYZ[1] + rDataXYZ[2]*rDataXYZ[2]);
-   val = acos(val);
-   val = val/ M_PI * 180;
-   uLCD.cls();
-   uLCD.printf("angle = %g  %d, %d, %d\n", val, PDataXYZ[0], PDataXYZ[1], PDataXYZ[2]);
-   if (val > angle) {
-    printf("angle = %g  %d, %d, %d\n", val, PDataXYZ[0], PDataXYZ[1], PDataXYZ[2]);
-    mqtt_queue.call(&publish_message, rpcclient);
-    Count = Count + 1;
-   }
-}
 
-void initialize() {
+/*void initialize() {
   BSP_ACCELERO_AccGetXYZ(rDataXYZ);
   printf("%d, %d, %d\n", rDataXYZ[0], rDataXYZ[1], rDataXYZ[2]);
-}
+}*/
 
-void tilt(Arguments *in, Reply *out) {
+/*void tilt(Arguments *in, Reply *out) {
   BSP_ACCELERO_Init();
   message_num = 0;
   printf("Tilt mode");
@@ -440,20 +461,30 @@ void tilt(Arguments *in, Reply *out) {
     indexR = indexR % 32;
     ThisThread::sleep_for(100ms);
   }
-}
+}*/
 
-void gestureUI(Arguments *in, Reply *out) {
+void acc(Arguments *in, Reply *out) {
    //const char *tmp = in->getArg<const char*>();
-   myled = 1;
-   off2 = 1;
-   printf("GESTURE MODE");
-   c = 0;
-   mqtt_queue.call(angle_select);
+   printf("accelerator capture mode");
+   for(n = 0; n < 10; n++) {
+    mqtt_queue.call(angle_select);
+   }
    //for(int i = 0; tmp[i] != 0; i++) {
      // lcd.putc(tmp[i]);
    //}
 }
-
+void result(Arguments *in, Reply *out) {
+  printf("Gesture ID:       ");
+  for(int k = 0; k < 10; k++) {
+    printf(ID[k]);
+    printf("   ");
+  }
+  printf("\nFeature(>30 degree): ");
+  for(int k = 0; k < 10; k++) {
+    printf(fea[k]);
+    printf("   ");
+  }
+}
 
 
 /*void doLocate(Arguments *in, Reply *out) {
