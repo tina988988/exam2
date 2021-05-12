@@ -30,12 +30,12 @@ Thread thread, t;
 EventQueue queue(64 * EVENTS_EVENT_SIZE);
 //InterruptIn sw0(USER_BUTTON);
 WiFiInterface *wifi;
-
+int c = 0;
 double x[10] = {0};
 double y[10] = {0};
 double z[10] = {0};
 int ID[10] = {0};
-int fea[10] = {0}
+int fea[10] = {0};
 int16_t PDataXYZ[3] = {0};
 //int16_t rDataXYZ[3] = {0};
 uLCD_4DGL uLCD(D1, D0, D2);
@@ -156,10 +156,13 @@ void record() {
 }
 
 void angle_select() {
- // BSP_ACCELERO_AccGetXYZ(PDataXYZ);
-  idR[indexR++] = mqtt_queue.call(record);
-  indexR = indexR % 32;
-  ThisThread::sleep_for(100ms);
+  //BSP_ACCELERO_AccGetXYZ(PDataXYZ);
+      idR[indexR++] = mqtt_queue.call(record);
+      indexR = indexR % 32;
+    // ThisThread::sleep_for(100ms);
+ // idR[indexR++] = mqtt_queue.call(record(re));
+  //indexR = indexR % 32;
+  //ThisThread::sleep_for(100ms);
    // Whether we should clear the buffer next time we fetch data
   bool should_clear_buffer = false;
   bool got_data = false;
@@ -273,6 +276,7 @@ void angle_select() {
         ID[n] = 1;
         queue.call(feature);
         mqtt_queue.call(&publish_message, rpcclient);
+        return;
       }
       else if (gesture_index == 1) {
         uLCD.cls();
@@ -281,6 +285,7 @@ void angle_select() {
         ID[n] = 2;
         queue.call(feature);
         mqtt_queue.call(&publish_message, rpcclient);
+        return;
       }
       else if (gesture_index == 2) {
         uLCD.cls();
@@ -289,11 +294,12 @@ void angle_select() {
         ID [n] = 3; 
         queue.call(feature);
         mqtt_queue.call(&publish_message, rpcclient);
+        return;
       }
       
     }
-    
-    return;
+    //if (n == 19) return;
+    //return;
     //if (c == 1) {
       //printf("hello");
     //  mqtt_queue.call(&publish_message, rpcclient);
@@ -476,14 +482,16 @@ void acc(Arguments *in, Reply *out) {
 void result(Arguments *in, Reply *out) {
   printf("Gesture ID:       ");
   for(int k = 0; k < 10; k++) {
-    printf(ID[k]);
+    printf("%d", ID[k]);
     printf("   ");
   }
   printf("\nFeature(>30 degree): ");
   for(int k = 0; k < 10; k++) {
-    printf(fea[k]);
+    printf("%d", fea[k]);
     printf("   ");
   }
+  printf("\nhiii");
+  printf("%d", fea[0]);
 }
 
 
