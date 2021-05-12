@@ -490,8 +490,6 @@ void result(Arguments *in, Reply *out) {
     printf("%d", fea[k]);
     printf("   ");
   }
-  printf("\nhiii");
-  printf("%d", fea[0]);
 }
 
 
